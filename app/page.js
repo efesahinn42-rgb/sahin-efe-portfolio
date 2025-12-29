@@ -1,41 +1,61 @@
 // app/page.js
+"use client"; // Animasyon kullandığımız için bu satır şart!
+
 import Image from "next/image";
 import Link from "next/link";
+import { motion } from "framer-motion"; // Animasyon kütüphanesi
+import FallingLeaves from "@/components/FallingLeaves";
 
 export default function Home() {
   return (
-    // relative: Bu kutu "Referans Noktası" olsun. İçindeki "absolute" elemanlar buna göre hizalansın.
-    // h-screen: Yükseklik ekran boyu kadar olsun (böylece resim tam sığar).
-    // overflow-hidden: Eğer resim taşarsa, taşan kısımları gizle (scrol çıkmasın).
-    <div className="relative h-screen flex flex-col items-center justify-center overflow-hidden">
-      {/* --- KATMAN 1: ARKA PLAN RESMİ (En altta) --- */}
+    <div className="relative h-screen flex flex-col items-center justify-center overflow-hidden bg-black">
+      {/* 1. KATMAN: Yaprak Efekti */}
+      <div className="absolute inset-0 z-10 pointer-events-none">
+        <FallingLeaves />
+      </div>
+
+      {/* 2. KATMAN: Arka Plan Resmi */}
       <div className="absolute inset-0 z-0">
         <Image
           src="/background.jpg"
           alt="Ghost of Tsushima Background"
-          fill // Resmi kutuya tam doldur
-          className="object-cover opacity-40" // opacity-40: Resmi %60 kararttık ki yazılar okunsun.
-          priority // Bu resim çok önemli, hemen yükle.
+          fill
+          className="object-cover opacity-40"
+          priority
         />
-        {/* İsteğe bağlı: Resmin üzerine siyah bir perde çekmek için gradient ekleyebiliriz */}
         <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-black opacity-80"></div>
       </div>
 
-      {/* --- KATMAN 2: İÇERİK (Üstte) --- */}
-      {/* z-10: Z-Index değeri. Sayı ne kadar büyükse o kadar öndedir. Resim z-0 idi. */}
-      <div className="relative z-10 text-center px-4">
-        {/* Karşılama Yazısı */}
-        <h1 className="text-6xl md:text-8xl font-bold mb-4 tracking-tighter text-white drop-shadow-2xl">
+      {/* 3. KATMAN: Yazı ve İçerik (Animasyonlu) */}
+      <div className="relative z-20 text-center px-4">
+        {/* İSİM ANİMASYONU: Soldan Sağa */}
+        <motion.h1
+          initial={{ x: -100, opacity: 0 }} // Başlangıç: Solda (-100px) ve görünmez
+          animate={{ x: 0, opacity: 1 }} // Bitiş: Ortada ve görünür
+          transition={{ duration: 1.2, ease: "easeOut" }} // Süre: 1.2 saniye
+          className="text-6xl md:text-8xl font-bold mb-4 tracking-tighter text-white drop-shadow-2xl"
+        >
           ŞAHİN <span className="text-red-600">EFE</span>
-        </h1>
+        </motion.h1>
 
-        <p className="text-xl md:text-2xl text-gray-300 mb-8 font-light tracking-wide">
+        {/* UNVAN ANİMASYONU: Yavaşça Belirme (Gecikmeli) */}
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.8, duration: 1.5 }} // İsimden sonra başlasın (delay)
+          className="text-xl md:text-2xl text-gray-300 mb-8 font-light tracking-wide"
+        >
           Web Geliştirici &{" "}
           <span className="italic text-red-400">Code Ronin</span>
-        </p>
+        </motion.p>
 
-        {/* Butonlar */}
-        <div className="flex gap-4 justify-center">
+        {/* BUTONLAR ANİMASYONU: Aşağıdan Yukarı */}
+        <motion.div
+          initial={{ y: 50, opacity: 0 }} // Başlangıç: Aşağıda
+          animate={{ y: 0, opacity: 1 }} // Bitiş: Yerinde
+          transition={{ delay: 1.5, duration: 0.8 }} // En son bu gelsin
+          className="flex gap-4 justify-center"
+        >
           <Link
             href="/projects"
             className="bg-red-700 hover:bg-red-800 text-white px-8 py-3 rounded-sm transition-all duration-300 transform hover:scale-105 shadow-[0_0_15px_rgba(220,38,38,0.5)]"
@@ -49,7 +69,7 @@ export default function Home() {
           >
             İLETİŞİM
           </Link>
-        </div>
+        </motion.div>
       </div>
     </div>
   );

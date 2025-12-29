@@ -1,7 +1,11 @@
 // app/projects/page.js
+"use client"; // Animasyonlar için şart
+
 import Link from "next/link";
+import { motion } from "framer-motion";
 
 const Projects = () => {
+  // SENİN PROJE LİSTEN
   const projects = [
     {
       id: 1,
@@ -34,15 +38,15 @@ const Projects = () => {
       id: 4,
       title: "Futbol Forum Uygulaması",
       description: "Futbol taraftar forum uygulaması",
-      tags: ["Next.js", "Dashboard", "SaaS"],
+      tags: ["Next.js", "Community", "Social"],
       link: "#",
       status: "Geliştirme",
     },
     {
       id: 5,
       title: "Portfolyo Sayfam",
-      description: "Kişisel Web Portfolyom",
-      tags: ["Next.js", "Dashboard", "SaaS"],
+      description: "Şu an gezdiğiniz kişisel web portfolyom.",
+      tags: ["Next.js", "Tailwind", "Framer Motion"],
       link: "#",
       status: "Tamamlandı",
     },
@@ -51,11 +55,27 @@ const Projects = () => {
       title: "Haber Web Uygulaması",
       description:
         "Türkiye ve Dünyadan En güncel haberlerin olduğu web uygulaması",
-      tags: ["Next.js", "Dashboard", "SaaS"],
+      tags: ["API", "News", "React"],
       link: "#",
       status: "Geliştirme",
     },
   ];
+
+  // ANİMASYON AYARLARI
+  const container = {
+    hidden: { opacity: 0 },
+    show: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.1, // Kartlar 0.1 saniye arayla gelsin
+      },
+    },
+  };
+
+  const item = {
+    hidden: { opacity: 0, y: 30 }, // Aşağıdan başla
+    show: { opacity: 1, y: 0 }, // Yerine gel
+  };
 
   return (
     <div className="max-w-6xl mx-auto">
@@ -63,12 +83,18 @@ const Projects = () => {
         Projelerim
       </h1>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <motion.div
+        variants={container}
+        initial="hidden"
+        animate="show"
+        className="grid grid-cols-1 md:grid-cols-2 gap-6"
+      >
         {projects.map((project) => (
-          // KART TASARIMI: Siyah zemin, kırmızı kenarlık, hover ile kırmızı gölge
-          <div
+          // KART TASARIMI (Animasyonlu)
+          <motion.div
             key={project.id}
-            className="group bg-zinc-900/30 border border-red-900/30 rounded-sm p-6 hover:-translate-y-1 transition-all duration-300 hover:shadow-[0_0_20px_rgba(185,28,28,0.15)] hover:border-red-800"
+            variants={item}
+            className="group bg-zinc-900/30 border border-red-900/30 rounded-sm p-6 hover:-translate-y-1 transition-all duration-300 hover:shadow-[0_0_20px_rgba(185,28,28,0.15)] hover:border-red-800 flex flex-col"
           >
             <div className="flex justify-between items-start mb-4">
               <h3 className="text-2xl font-bold text-white group-hover:text-red-500 transition-colors">
@@ -86,13 +112,16 @@ const Projects = () => {
               </span>
             </div>
 
-            <p className="text-gray-400 mb-6 h-16 text-sm leading-relaxed">
+            <p className="text-gray-400 mb-6 text-sm leading-relaxed flex-grow">
               {project.description}
             </p>
 
             <div className="flex flex-wrap gap-2 mb-6">
               {project.tags.map((tag, index) => (
-                <span key={index} className="text-xs text-red-400/80 font-mono">
+                <span
+                  key={index}
+                  className="text-xs text-red-400/80 font-mono border border-red-900/20 px-1 rounded"
+                >
                   #{tag}
                 </span>
               ))}
@@ -102,15 +131,19 @@ const Projects = () => {
             <Link
               href={project.link}
               target={project.link.startsWith("http") ? "_blank" : "_self"}
-              className="inline-block w-full text-center border border-red-700 text-red-500 hover:bg-red-700 hover:text-white font-medium py-3 rounded-sm transition-all duration-300"
+              className={`inline-block w-full text-center border font-medium py-3 rounded-sm transition-all duration-300 ${
+                project.status === "Tamamlandı"
+                  ? "border-red-700 text-red-500 hover:bg-red-700 hover:text-white cursor-pointer"
+                  : "border-zinc-700 text-zinc-500 cursor-not-allowed opacity-50"
+              }`}
             >
               {project.status === "Tamamlandı"
                 ? "Projeyi İncele"
                 : "Yakında..."}
             </Link>
-          </div>
+          </motion.div>
         ))}
-      </div>
+      </motion.div>
     </div>
   );
 };

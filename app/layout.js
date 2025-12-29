@@ -22,15 +22,14 @@ export default function RootLayout({ children }) {
   return (
     <html lang="tr">
       <body className={inter.className}>
-        <div className="flex">
-          {/* 1. PARÇA: Sidebar (Solda sabit) */}
+        <div className="flex flex-col md:flex-row">
           <Sidebar />
 
-          {/* 2. PARÇA: Ana İçerik (Sidebar'ın sağında kalan alan) 
-              ml-64: Sidebar 64 birim genişliğinde olduğu için,
-              içeriği 64 birim sağdan başlatıyoruz (Margin Left) ki üst üste binmesin.
-          */}
-          <main className="ml-64 w-full min-h-screen bg-black text-gray-300 p-10">
+          {/* GÜNCELLENEN KISIM: */}
+          {/* ml-0: Telefondaysa sola yapış. */}
+          {/* md:ml-64: Bilgisayardaysa soldan 64 birim (Sidebar kadar) boşluk bırak. */}
+          {/* pb-24: Telefondaysa en alta boşluk bırak (Menü üzerine binmesin). */}
+          <main className="ml-0 md:ml-64 w-full min-h-screen bg-black text-gray-300 p-6 md:p-10 pb-24 md:pb-10">
             {children}
           </main>
         </div>

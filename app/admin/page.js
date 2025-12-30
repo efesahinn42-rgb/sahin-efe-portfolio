@@ -9,9 +9,10 @@ export default function AdminDashboard() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState(null);
-
-  // Projeleri tutacak state
   const [projects, setProjects] = useState([]);
+
+  // DÜZENLEME MODU İÇİN STATE
+  const [editingProject, setEditingProject] = useState(null); // Düzenlenen proje burada tutulur
 
   // FORM VERİLERİ
   const [formData, setFormData] = useState({
@@ -22,10 +23,13 @@ export default function AdminDashboard() {
     status: "Geliştirme",
   });
 
-  // 1. GÜVENLİK VE VERİ ÇEKME
+  // Resim Dosyası
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [uploading, setUploading] = useState(false);
+
+  // 1. BAŞLANGIÇ AYARLARI
   useEffect(() => {
     const init = async () => {
-      // a) Kullanıcı Kontrolü
       const {
         data: { session },
       } = await supabase.auth.getSession();
@@ -34,22 +38,18 @@ export default function AdminDashboard() {
         return;
       }
       setUser(session.user);
-
-      // b) Mevcut Projeleri Çek (Listelemek için)
       fetchProjects();
-
       setLoading(false);
     };
     init();
   }, [router]);
 
-  // Projeleri Veritabanından Getir
+  // Projeleri Getir
   const fetchProjects = async () => {
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from("projects")
       .select("*")
-      .order("id", { ascending: false }); // En son eklenen en üstte
-
+      .order("id", { ascending: false });
     if (data) setProjects(data);
   };
 
@@ -57,53 +57,129 @@ export default function AdminDashboard() {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  // 2. PROJE EKLEME
+  const handleFileChange = (e) => {
+    if (e.target.files && e.target.files.length > 0) {
+      setSelectedFile(e.target.files[0]);
+    }
+  };
+
+  // 2. DÜZENLEME MODUNU AÇMA ✏️
+  const handleEditClick = (project) => {
+    setEditingProject(project); // Hangi projeyi düzenlediğimizi bilelim
+
+    // Formu o projenin bilgileriyle doldur
+    setFormData({
+      title: project.title,
+      description: project.description,
+      tags: project.tags ? project.tags.join(", ") : "", // Array'i stringe çevir
+      link: project.link || "",
+      status: project.status,
+    });
+
+    setSelectedFile(null); // Dosya seçimini sıfırla
+    window.scrollTo({ top: 0, behavior: "smooth" }); // Sayfayı yukarı kaydır
+    setMessage({ type: "info", text: `"${project.title}" düzenleniyor...` });
+  };
+
+  // 3. DÜZENLEMEYİ İPTAL ET
+  const handleCancelEdit = () => {
+    setEditingProject(null);
+    setFormData({
+      title: "",
+      description: "",
+      tags: "",
+      link: "",
+      status: "Geliştirme",
+    });
+    setSelectedFile(null);
+    setMessage(null);
+  };
+
+  // 4. KAYDETME VEYA GÜNCELLEME İŞLEMİ
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setMessage({ type: "info", text: "Kaydediliyor..." });
+    setUploading(true);
+    setMessage({
+      type: "info",
+      text: editingProject ? "Güncelleniyor..." : "Kaydediliyor...",
+    });
+
+    let final_image_url = editingProject ? editingProject.image_url : null;
+
+    // A) YENİ RESİM SEÇİLDİYSE YÜKLE
+    if (selectedFile) {
+      const fileExt = selectedFile.name.split(".").pop();
+      const fileName = `${Date.now()}.${fileExt}`;
+      const filePath = `${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("project-images")
+        .upload(filePath, selectedFile);
+
+      if (uploadError) {
+        setMessage({
+          type: "error",
+          text: "Resim hatası: " + uploadError.message,
+        });
+        setUploading(false);
+        return;
+      }
+
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from("project-images").getPublicUrl(filePath);
+
+      final_image_url = publicUrl;
+    }
 
     const tagArray = formData.tags.split(",").map((tag) => tag.trim());
+    const projectData = {
+      title: formData.title,
+      description: formData.description,
+      tags: tagArray,
+      link: formData.link,
+      status: formData.status,
+      image_url: final_image_url,
+    };
 
-    const { error } = await supabase.from("projects").insert([
-      {
-        title: formData.title,
-        description: formData.description,
-        tags: tagArray,
-        link: formData.link,
-        status: formData.status,
-      },
-    ]);
+    let error;
+
+    if (editingProject) {
+      // --- GÜNCELLEME (UPDATE) ---
+      const { error: updateError } = await supabase
+        .from("projects")
+        .update(projectData)
+        .eq("id", editingProject.id); // Sadece bu ID'yi güncelle
+      error = updateError;
+    } else {
+      // --- YENİ EKLEME (INSERT) ---
+      const { error: insertError } = await supabase
+        .from("projects")
+        .insert([projectData]);
+      error = insertError;
+    }
 
     if (error) {
       setMessage({ type: "error", text: "Hata: " + error.message });
     } else {
-      setMessage({ type: "success", text: "Proje Başarıyla Eklendi! 🚀" });
-      setFormData({
-        title: "",
-        description: "",
-        tags: "",
-        link: "",
-        status: "Geliştirme",
+      setMessage({
+        type: "success",
+        text: editingProject ? "Proje Güncellendi! ✅" : "Proje Eklendi! 🚀",
       });
+      handleCancelEdit(); // Formu temizle ve moddan çık
       fetchProjects(); // Listeyi yenile
     }
+    setUploading(false);
   };
 
-  // 3. PROJE SİLME İŞLEMİ (YENİ) 🗑️
+  // 5. SİLME İŞLEMİ
   const handleDelete = async (id) => {
-    // Emin misin diye soralım
-    if (
-      !window.confirm("Bu projeyi kalıcı olarak silmek istediğine emin misin?")
-    )
-      return;
-
+    if (!window.confirm("Bu projeyi silmek istediğine emin misin?")) return;
     const { error } = await supabase.from("projects").delete().eq("id", id);
-
-    if (error) {
-      alert("Silinirken hata oluştu: " + error.message);
-    } else {
-      // Ekrandan da kaldıralım (Sayfayı yenilemeden)
-      setProjects(projects.filter((project) => project.id !== id));
+    if (!error) {
+      setProjects(projects.filter((p) => p.id !== id));
+      // Eğer silinen proje o an düzenleniyorsa, formu temizle
+      if (editingProject?.id === id) handleCancelEdit();
     }
   };
 
@@ -113,44 +189,51 @@ export default function AdminDashboard() {
   };
 
   if (loading)
-    return (
-      <div className="text-white text-center mt-20 animate-pulse">
-        Güvenlik Taraması...
-      </div>
-    );
+    return <div className="text-white text-center mt-20">Yükleniyor...</div>;
 
   return (
     <div className="max-w-6xl mx-auto p-6 pb-20">
-      {/* ÜST BAR */}
       <div className="flex justify-between items-center mb-8 border-b border-red-900/50 pb-6">
-        <div>
-          <h1 className="text-3xl font-bold text-white">Kaptan Köşkü</h1>
-          <p className="text-xs text-gray-500 mt-1">
-            Giriş Yapıldı: {user?.email}
-          </p>
-        </div>
+        <h1 className="text-3xl font-bold text-white">Kaptan Köşkü</h1>
         <button
           onClick={handleLogout}
-          className="text-xs text-red-400 border border-red-900/30 px-3 py-2 rounded hover:bg-red-900/30 transition-all"
+          className="text-xs text-red-400 border border-red-900/30 px-3 py-2 rounded hover:bg-red-900/30"
         >
           Çıkış Yap
         </button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-        {/* SOL TARA: FORM ALANI */}
-        <div className="bg-zinc-900/30 border border-zinc-800 p-8 rounded-lg shadow-xl h-fit">
-          <h2 className="text-xl text-white mb-6 flex items-center gap-2">
-            <span className="text-red-500">Add New Project</span> / Yeni Silah
-            Ekle
-          </h2>
+        {/* SOL: FORM */}
+        <div
+          className={`bg-zinc-900/30 border p-8 rounded-lg shadow-xl h-fit transition-colors ${
+            editingProject ? "border-yellow-600/50" : "border-zinc-800"
+          }`}
+        >
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-xl text-white">
+              {editingProject
+                ? `Düzenleniyor: ${editingProject.title}`
+                : "Yeni Proje Ekle"}
+            </h2>
+            {editingProject && (
+              <button
+                onClick={handleCancelEdit}
+                className="text-xs text-gray-400 hover:text-white underline"
+              >
+                İptal Et / Yeni Ekle
+              </button>
+            )}
+          </div>
 
           {message && (
             <div
               className={`p-4 mb-6 rounded text-sm ${
-                message.type === "success"
-                  ? "bg-green-900/20 text-green-400 border border-green-900"
-                  : "bg-red-900/20 text-red-400 border border-red-900"
+                message.type === "error"
+                  ? "bg-red-900/20 text-red-400"
+                  : message.type === "info"
+                  ? "bg-blue-900/20 text-blue-400"
+                  : "bg-green-900/20 text-green-400"
               }`}
             >
               {message.text}
@@ -158,138 +241,162 @@ export default function AdminDashboard() {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <label className="block text-sm text-gray-400 mb-2">
-                Proje Adı
-              </label>
+            {/* RESİM ALANI */}
+            <div className="border-2 border-dashed border-zinc-700 rounded-lg p-6 text-center hover:border-red-500 transition-colors cursor-pointer relative group">
               <input
-                name="title"
-                value={formData.title}
-                onChange={handleChange}
-                className="w-full bg-black border border-zinc-700 text-white p-3 rounded focus:border-red-600 focus:outline-none"
-                required
+                type="file"
+                accept="image/*"
+                onChange={handleFileChange}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
               />
+              <div className="text-gray-400">
+                {selectedFile ? (
+                  <span className="text-green-500 font-bold">
+                    Yeni Resim: {selectedFile.name}
+                  </span>
+                ) : editingProject?.image_url ? (
+                  <div className="flex flex-col items-center">
+                    <img
+                      src={editingProject.image_url}
+                      alt="Mevcut"
+                      className="h-20 object-cover mb-2 rounded border border-zinc-600"
+                    />
+                    <span className="text-xs text-yellow-500">
+                      Mevcut resim korunacak. Değiştirmek için tıkla.
+                    </span>
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-3xl mb-2">📸</p>
+                    <p>
+                      {editingProject
+                        ? "Resim Ekle/Değiştir"
+                        : "Kapak Resmi Yükle"}
+                    </p>
+                  </>
+                )}
+              </div>
             </div>
+
+            <input
+              name="title"
+              value={formData.title}
+              onChange={handleChange}
+              placeholder="Proje Adı"
+              className="w-full bg-black border border-zinc-700 text-white p-3 rounded"
+              required
+            />
 
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm text-gray-400 mb-2">
-                  Durum
-                </label>
-                <select
-                  name="status"
-                  value={formData.status}
-                  onChange={handleChange}
-                  className="w-full bg-black border border-zinc-700 text-white p-3 rounded focus:border-red-600 focus:outline-none"
-                >
-                  <option value="Geliştirme">🛠 Geliştirme</option>
-                  <option value="Tamamlandı">✅ Tamamlandı</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm text-gray-400 mb-2">Link</label>
-                <input
-                  name="link"
-                  value={formData.link}
-                  onChange={handleChange}
-                  className="w-full bg-black border border-zinc-700 text-white p-3 rounded focus:border-red-600 focus:outline-none"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm text-gray-400 mb-2">
-                Açıklama
-              </label>
-              <textarea
-                name="description"
-                value={formData.description}
+              <select
+                name="status"
+                value={formData.status}
                 onChange={handleChange}
-                rows="3"
-                className="w-full bg-black border border-zinc-700 text-white p-3 rounded focus:border-red-600 focus:outline-none"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm text-gray-400 mb-2">
-                Etiketler
-              </label>
+                className="w-full bg-black border border-zinc-700 text-white p-3 rounded"
+              >
+                <option value="Geliştirme">🛠 Geliştirme</option>
+                <option value="Tamamlandı">✅ Tamamlandı</option>
+              </select>
               <input
-                name="tags"
-                value={formData.tags}
+                name="link"
+                value={formData.link}
                 onChange={handleChange}
-                className="w-full bg-black border border-zinc-700 text-white p-3 rounded focus:border-red-600 focus:outline-none"
-                placeholder="React, Tailwind"
+                placeholder="Link"
+                className="w-full bg-black border border-zinc-700 text-white p-3 rounded"
               />
             </div>
+
+            <textarea
+              name="description"
+              value={formData.description}
+              onChange={handleChange}
+              rows="3"
+              placeholder="Açıklama"
+              className="w-full bg-black border border-zinc-700 text-white p-3 rounded"
+              required
+            />
+            <input
+              name="tags"
+              value={formData.tags}
+              onChange={handleChange}
+              placeholder="Etiketler (React, Next.js)"
+              className="w-full bg-black border border-zinc-700 text-white p-3 rounded"
+            />
 
             <button
               type="submit"
-              className="w-full bg-white text-black font-bold py-3 rounded hover:bg-gray-200 transition-all"
+              disabled={uploading}
+              className={`w-full font-bold py-3 rounded transition-all ${
+                editingProject
+                  ? "bg-yellow-600 hover:bg-yellow-500 text-black"
+                  : "bg-white hover:bg-gray-200 text-black"
+              }`}
             >
-              SİSTEME KAYDET
+              {uploading
+                ? "İŞLENİYOR..."
+                : editingProject
+                ? "GÜNCELLEMEYİ KAYDET"
+                : "SİSTEME KAYDET"}
             </button>
           </form>
         </div>
 
-        {/* SAĞ TARAF: LİSTE VE SİLME */}
+        {/* SAĞ: ENVANTER */}
         <div className="bg-zinc-900/30 border border-zinc-800 p-8 rounded-lg">
-          <h2 className="text-xl text-white mb-6 flex items-center gap-2">
-            <span className="text-gray-500">Inventory</span> / Mevcut Silahlar (
-            {projects.length})
+          <h2 className="text-xl text-white mb-6">
+            Mevcut Envanter ({projects.length})
           </h2>
-
           <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
             {projects.map((project) => (
               <div
                 key={project.id}
-                className="flex justify-between items-center bg-black/40 p-4 rounded border border-zinc-800 hover:border-zinc-600 transition-all group"
+                className={`flex gap-4 items-center bg-black/40 p-3 rounded border transition-all ${
+                  editingProject?.id === project.id
+                    ? "border-yellow-600 bg-yellow-900/10"
+                    : "border-zinc-800 hover:border-zinc-600"
+                }`}
               >
-                <div>
-                  <h3 className="text-white font-bold">{project.title}</h3>
-                  <span
-                    className={`text-[10px] px-1.5 py-0.5 rounded border ${
-                      project.status === "Tamamlandı"
-                        ? "border-green-900 text-green-500"
-                        : "border-yellow-900 text-yellow-500"
-                    }`}
-                  >
+                <div className="w-12 h-12 bg-zinc-800 rounded overflow-hidden flex-shrink-0">
+                  {project.image_url ? (
+                    <img
+                      src={project.image_url}
+                      alt="kapak"
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-xs text-gray-600">
+                      Yok
+                    </div>
+                  )}
+                </div>
+                <div className="flex-grow min-w-0">
+                  <h3 className="text-white font-bold text-sm truncate">
+                    {project.title}
+                  </h3>
+                  <span className="text-xs text-gray-500">
                     {project.status}
                   </span>
                 </div>
 
-                <button
-                  onClick={() => handleDelete(project.id)}
-                  className="bg-red-900/20 hover:bg-red-600 hover:text-white text-red-500 p-2 rounded transition-all"
-                  title="Sil"
-                >
-                  {/* Çöp Kutusu İkonu */}
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="18"
-                    height="18"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
+                {/* BUTONLAR */}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleEditClick(project)}
+                    className="p-2 text-yellow-500 hover:bg-yellow-900/20 rounded"
+                    title="Düzenle"
                   >
-                    <polyline points="3 6 5 6 21 6"></polyline>
-                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                    <line x1="10" y1="11" x2="10" y2="17"></line>
-                    <line x1="14" y1="11" x2="14" y2="17"></line>
-                  </svg>
-                </button>
+                    ✏️
+                  </button>
+                  <button
+                    onClick={() => handleDelete(project.id)}
+                    className="p-2 text-red-500 hover:bg-red-900/20 rounded"
+                    title="Sil"
+                  >
+                    🗑
+                  </button>
+                </div>
               </div>
             ))}
-
-            {projects.length === 0 && (
-              <p className="text-gray-500 text-center py-10">
-                Henüz hiç silah eklenmedi.
-              </p>
-            )}
           </div>
         </div>
       </div>
